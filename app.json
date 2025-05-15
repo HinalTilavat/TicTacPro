@@ -8,6 +8,7 @@
     "scheme": "newdemo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true
     },
@@ -19,13 +20,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.neophile.tictactoe"
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
-      "expo-router",
       [
         "expo-splash-screen",
         {
@@ -40,7 +35,6 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "f84e2ac2-250d-46ae-8c56-a5ddcf3a69d6"
       }
