@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "NewDemo",
-    "slug": "NewDemo",
+    "name": "TicTacPro",
+    "slug": "TicTacPro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "newdemo",
+    "scheme": "TicTacPro",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
 
