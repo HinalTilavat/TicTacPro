@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
 type Player = 'X' | 'O' | null;
@@ -43,19 +43,29 @@ const TicTacToe: React.FC = () => {
   };
 
   const playSound = async () => {
-    if (!soundEnabled || !sound) return;
-    
+    if (!soundEnabled && !sound) return;
+
     try {
-      await sound.replayAsync();
+      if (sound) {
+        await sound.replayAsync();
+      }
     } catch (error) {
       console.log('Error playing sound:', error);
+    }
+  };
+
+  const toggleSound = () => {
+    const newState = !soundEnabled;
+    setSoundEnabled(newState);
+    if (newState && !sound) {
+      loadSound(); // reload sound if it was unloaded
     }
   };
 
   const checkWinner = (squares: Player[]): Player | 'draw' | null => {
     const lines = [
       [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+      [0, 3, 6], [1, 4, 7], [2, 5, 8], // cols
       [0, 4, 8], [2, 4, 6], // diagonals
     ];
 
@@ -75,7 +85,7 @@ const TicTacToe: React.FC = () => {
   const handleClick = async (index: number) => {
     if (board[index] || winner) return;
 
-    playSound();
+    await playSound();
     const newBoard = [...board];
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
@@ -93,20 +103,41 @@ const TicTacToe: React.FC = () => {
     }
 
     setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
-
-    if (gameMode === 'single' && currentPlayer === 'X') {
-      setTimeout(() => makeComputerMove(newBoard), 500);
-    }
   };
+
+  useEffect(() => {
+    if (gameMode === 'single' && currentPlayer === 'O' && !winner) {
+      const timer = setTimeout(() => makeComputerMove(board), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [currentPlayer, gameMode, board, winner]);
 
   const makeComputerMove = (currentBoard: Player[]) => {
     const emptySquares = currentBoard
       .map((square, index) => (square === null ? index : null))
-      .filter(square => square !== null);
+      .filter(index => index !== null) as number[];
 
     if (emptySquares.length > 0) {
       const randomIndex = Math.floor(Math.random() * emptySquares.length);
-      handleClick(emptySquares[randomIndex]!);
+      const index = emptySquares[randomIndex];
+
+      const newBoard = [...currentBoard];
+      newBoard[index] = 'O';
+      setBoard(newBoard);
+
+      const gameWinner = checkWinner(newBoard);
+      if (gameWinner) {
+        setWinner(gameWinner);
+        if (gameWinner !== 'draw') {
+          setScores(prev => ({
+            ...prev,
+            [gameWinner]: prev[gameWinner] + 1,
+          }));
+        }
+        return;
+      }
+
+      setCurrentPlayer('X');
     }
   };
 
@@ -123,9 +154,11 @@ const TicTacToe: React.FC = () => {
 
   const renderSquare = (index: number) => (
     <TouchableOpacity
+      key={index}
       style={styles.square}
-      onPress={() => handleClick(index)}
-      key={index + Math.random().toString()}
+      onPress={() => {
+        if (!board[index] && !winner) handleClick(index);
+      }}
     >
       <Text style={styles.squareText}>{board[index]}</Text>
     </TouchableOpacity>
@@ -141,9 +174,9 @@ const TicTacToe: React.FC = () => {
               {gameMode === 'single' ? 'Single Player' : 'Two Players'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.soundButton, !soundEnabled && styles.soundButtonDisabled]} 
-            onPress={() => setSoundEnabled(!soundEnabled)}
+          <TouchableOpacity
+            style={[styles.soundButton, !soundEnabled && styles.soundButtonDisabled]}
+            onPress={toggleSound}
           >
             <Text style={styles.soundButtonText}>
               {soundEnabled ? '🔊' : '🔇'}
@@ -235,10 +268,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 5,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
@@ -278,6 +308,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
     padding: 10,
     borderRadius: 8,
+    marginLeft: 10,
   },
   soundButtonDisabled: {
     backgroundColor: '#ccc',
@@ -287,4 +318,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TicTacToe; 
+export default TicTacToe;
