@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
   StyleSheet,
@@ -8,204 +8,222 @@ import {
   View,
 } from 'react-native';
 
-type Player = 'X' | 'O' | null;
-type GameMode = 'single' | 'multi';
+const BOARD_SIZE = 9;
+const initialBoard = Array(BOARD_SIZE).fill(null);
 
-const TicTacToe: React.FC = () => {
-  const [board, setBoard] = useState<Player[]>(Array(9).fill(null));
-  const [currentPlayer, setCurrentPlayer] = useState<Player>('X');
-  const [winner, setWinner] = useState<Player | 'draw' | null>(null);
-  const [gameMode, setGameMode] = useState<GameMode>('single');
+const winningLines = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6],
+];
+
+const TicTacToe = () => {
+  const [board, setBoard] = useState(initialBoard);
+  const [currentPlayer, setCurrentPlayer] = useState('X');
+  const [winner, setWinner] = useState(null);
+  const [gameMode, setGameMode] = useState('single');
+  const [difficulty, setDifficulty] = useState('hard');
   const [scores, setScores] = useState({ X: 0, O: 0 });
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [sound, setSound] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
-    loadSound();
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
+    let isMounted = true;
+    (async () => {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require('../../assets/sounds/click1.mp3'),
+          { shouldPlay: false }
+        );
+        if (isMounted) setSound(sound);
+      } catch (e) {
+        console.warn('Failed to load sound', e);
+        setSoundEnabled(false);
       }
+    })();
+    return () => {
+      isMounted = false;
+      sound && sound.unloadAsync();
     };
   }, []);
 
-  const loadSound = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('../../assets/sounds/click.mp3'),
-        { shouldPlay: false }
-      );
-      setSound(sound);
-    } catch (error) {
-      console.log('Sound disabled: Could not load sound file');
-      setSoundEnabled(false);
-    }
-  };
-
-  const playSound = async () => {
-    if (!soundEnabled && !sound) return;
-
-    try {
-      if (sound) {
-        await sound.replayAsync();
+  const playSound = useCallback(async () => {
+    // console.log('Playing sound:', soundEnabled);
+    if (soundEnabled && sound) {
+      try {
+        await sound.setPositionAsync(0);
+        await sound.playAsync();
+      } catch (e) {
+        console.warn('Play sound failed', e);
       }
-    } catch (error) {
-      console.log('Error playing sound:', error);
     }
-  };
+  }, [sound, soundEnabled]);
 
-  const toggleSound = () => {
-    const newState = !soundEnabled;
-    setSoundEnabled(newState);
-    if (newState && !sound) {
-      loadSound(); // reload sound if it was unloaded
-    }
-  };
-
-  const checkWinner = (squares: Player[]): Player | 'draw' | null => {
-    const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // cols
-      [0, 4, 8], [2, 4, 6], // diagonals
-    ];
-
-    for (const [a, b, c] of lines) {
+  const evaluateWinner = useCallback((squares) => {
+    for (const [a, b, c] of winningLines) {
       if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
         return squares[a];
       }
     }
+    return squares.includes(null) ? null : 'draw';
+  }, []);
 
-    if (squares.every(square => square !== null)) {
-      return 'draw';
-    }
-
-    return null;
-  };
-
-  const handleClick = async (index: number) => {
+  const updateGameState = async (index) => {
     if (board[index] || winner) return;
 
-    await playSound();
-    const newBoard = [...board];
+    const newBoard = board.slice();
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
 
-    const gameWinner = checkWinner(newBoard);
+    await playSound();
+
+    const gameWinner = evaluateWinner(newBoard);
     if (gameWinner) {
       setWinner(gameWinner);
       if (gameWinner !== 'draw') {
-        setScores(prev => ({
-          ...prev,
-          [gameWinner]: prev[gameWinner] + 1,
-        }));
+        setScores((prev) => ({ ...prev, [gameWinner]: prev[gameWinner] + 1 }));
       }
-      return;
+    } else {
+      setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
+    }
+  };
+
+  const handleClick = (index) => {
+    if (gameMode === 'multi' || currentPlayer === 'X') {
+      updateGameState(index);
+    }
+  };
+
+  const makeComputerMove = useCallback(async (currentBoard) => {
+    let move;
+    if (difficulty === 'hard') {
+      const evaluate = (b) => {
+        for (const [a, bIdx, c] of winningLines) {
+          if (b[a] && b[a] === b[bIdx] && b[a] === b[c]) {
+            return b[a] === 'O' ? 10 : -10;
+          }
+        }
+        return 0;
+      };
+
+      const minimax = (b, depth, isMax) => {
+        const score = evaluate(b);
+        if (score !== 0) return score - depth * (score / Math.abs(score));
+        if (!b.includes(null)) return 0;
+
+        let best = isMax ? -Infinity : Infinity;
+        for (let i = 0; i < 9; i++) {
+          if (!b[i]) {
+            b[i] = isMax ? 'O' : 'X';
+            const value = minimax(b, depth + 1, !isMax);
+            b[i] = null;
+            best = isMax ? Math.max(best, value) : Math.min(best, value);
+          }
+        }
+        return best;
+      };
+
+      let bestVal = -Infinity;
+      move = -1;
+      for (let i = 0; i < 9; i++) {
+        if (!currentBoard[i]) {
+          currentBoard[i] = 'O';
+          const val = minimax(currentBoard, 0, false);
+          currentBoard[i] = null;
+          if (val > bestVal) {
+            bestVal = val;
+            move = i;
+          }
+        }
+      }
+    } else {
+      const available = currentBoard
+        .map((v, i) => (v === null ? i : null))
+        .filter((v) => v !== null);
+      move = available[Math.floor(Math.random() * available.length)];
     }
 
-    setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
-  };
+    await playSound();
+    const newBoard = [...currentBoard];
+    newBoard[move] = 'O';
+    setBoard(newBoard);
+    const gameWinner = evaluateWinner(newBoard);
+    if (gameWinner) {
+      setWinner(gameWinner);
+      if (gameWinner !== 'draw') {
+        setScores((prev) => ({ ...prev, [gameWinner]: prev[gameWinner] + 1 }));
+      }
+    } else {
+      setCurrentPlayer('X');
+    }
+  }, [difficulty, evaluateWinner, playSound]);
 
   useEffect(() => {
     if (gameMode === 'single' && currentPlayer === 'O' && !winner) {
-      const timer = setTimeout(() => makeComputerMove(board), 500);
-      return () => clearTimeout(timer);
+      const timeout = setTimeout(() => makeComputerMove(board), 300);
+      return () => clearTimeout(timeout);
     }
-  }, [currentPlayer, gameMode, board, winner]);
-
-  const makeComputerMove = (currentBoard: Player[]) => {
-    const emptySquares = currentBoard
-      .map((square, index) => (square === null ? index : null))
-      .filter(index => index !== null) as number[];
-
-    if (emptySquares.length > 0) {
-      const randomIndex = Math.floor(Math.random() * emptySquares.length);
-      const index = emptySquares[randomIndex];
-
-      const newBoard = [...currentBoard];
-      newBoard[index] = 'O';
-      setBoard(newBoard);
-
-      const gameWinner = checkWinner(newBoard);
-      if (gameWinner) {
-        setWinner(gameWinner);
-        if (gameWinner !== 'draw') {
-          setScores(prev => ({
-            ...prev,
-            [gameWinner]: prev[gameWinner] + 1,
-          }));
-        }
-        return;
-      }
-
-      setCurrentPlayer('X');
-    }
-  };
+  }, [currentPlayer, gameMode, board, winner, makeComputerMove]);
 
   const resetGame = () => {
-    setBoard(Array(9).fill(null));
+    setBoard(initialBoard);
     setCurrentPlayer('X');
     setWinner(null);
   };
 
   const toggleGameMode = () => {
-    setGameMode(prev => (prev === 'single' ? 'multi' : 'single'));
+    setGameMode((prev) => (prev === 'single' ? 'multi' : 'single'));
     resetGame();
   };
 
-  const renderSquare = (index: number) => (
-    <TouchableOpacity
-      key={index}
-      style={styles.square}
-      onPress={() => {
-        if (!board[index] && !winner) handleClick(index);
-      }}
-    >
-      <Text style={styles.squareText}>{board[index]}</Text>
-    </TouchableOpacity>
-  );
+  const toggleDifficulty = () => {
+    setDifficulty((prev) => (prev === 'easy' ? 'hard' : 'easy'));
+    resetGame();
+  };
+
+  const toggleSound = () => setSoundEnabled((prev) => !prev);
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Tic Tac Toe</Text>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.modeButton} onPress={toggleGameMode}>
-            <Text style={styles.modeButtonText}>
-              {gameMode === 'single' ? 'Single Player' : 'Two Players'}
-            </Text>
+      <Text style={styles.title}>Tic Tac Toe</Text>
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity onPress={toggleGameMode} style={styles.modeButton}>
+          <Text style={styles.modeButtonText}>{gameMode === 'single' ? 'Single Player' : 'Two Players'}</Text>
+        </TouchableOpacity>
+
+        {gameMode === 'single' && (
+          <TouchableOpacity onPress={toggleDifficulty} style={styles.difficultyButton}>
+            <Text style={styles.difficultyButtonText}>{difficulty}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.soundButton, !soundEnabled && styles.soundButtonDisabled]}
-            onPress={toggleSound}
-          >
-            <Text style={styles.soundButtonText}>
-              {soundEnabled ? '🔊' : '🔇'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        )}
+
+        <TouchableOpacity
+          onPress={toggleSound}
+          style={[styles.soundButton, !soundEnabled && styles.soundButtonDisabled]}>
+          <Text style={styles.soundButtonText}>{soundEnabled ? '🔊' : '🔇'}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.scoreBoard}>
-        <Text style={styles.scoreText}>Player X: {scores.X}</Text>
-        <Text style={styles.scoreText}>Player O: {scores.O}</Text>
+        <Text style={[styles.scoreText, styles.xText]}>X: {scores.X}</Text>
+        <Text style={[styles.scoreText, styles.oText]}>O: {scores.O}</Text>
       </View>
 
-      <View style={styles.status}>
-        <Text style={styles.statusText}>
-          {winner
-            ? winner === 'draw'
-              ? "It's a Draw!"
-              : `Winner: ${winner}`
-            : `Current Player: ${currentPlayer}`}
-        </Text>
-      </View>
+      <Text style={[styles.statusText, winner === 'X' ? styles.xText : winner === 'O' ? styles.oText : null]}>
+        {winner ? (winner === 'draw' ? "It's a draw!" : `Winner: ${winner}`) : `Turn: ${currentPlayer}`}
+      </Text>
 
       <View style={styles.board}>
-        {board.map((_, index) => renderSquare(index))}
+        {board.map((val, i) => (
+          <TouchableOpacity key={i} style={styles.square} onPress={() => handleClick(i)}>
+            <Text style={[styles.squareText, val === 'X' ? styles.xText : styles.oText]}>{val}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <TouchableOpacity style={styles.resetButton} onPress={resetGame}>
-        <Text style={styles.resetButtonText}>Reset Game</Text>
+        <Text style={styles.resetButtonText}>Reset</Text>
       </TouchableOpacity>
     </View>
   );
@@ -214,21 +232,61 @@ const TicTacToe: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f5f5f5',
-    padding: 20,
-  },
-  header: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 20,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
+    marginBottom: 20,
+  },
+  board: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: Dimensions.get('window').width - 40,
+    aspectRatio: 1,
+    marginTop: 20,
+  },
+  square: {
+    width: '33.33%',
+    height: '33.33%',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  squareText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  xText: {
+    color: '#E91E63',
+  },
+  oText: {
+    color: '#2196F3',
+  },
+  statusText: {
+    fontSize: 20,
+    marginTop: 10,
+  },
+  resetButton: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#f44336',
+    borderRadius: 8,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    alignItems: 'center',
+    gap: 10,
   },
   modeButton: {
     backgroundColor: '#4CAF50',
@@ -237,84 +295,37 @@ const styles = StyleSheet.create({
   },
   modeButtonText: {
     color: 'white',
-    fontSize: 16,
     fontWeight: '600',
   },
-  scoreBoard: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 20,
-  },
-  scoreText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  status: {
-    marginBottom: 20,
-  },
-  statusText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-  },
-  board: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: Dimensions.get('window').width - 40,
-    aspectRatio: 1,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  square: {
-    width: '33.33%',
-    height: '33.33%',
-    borderWidth: 2,
-    borderColor: '#ddd',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  squareText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  resetButton: {
-    marginTop: 20,
-    backgroundColor: '#f44336',
-    padding: 15,
+  difficultyButton: {
+    backgroundColor: '#FF9800',
+    padding: 10,
     borderRadius: 8,
-    width: '80%',
-    alignItems: 'center',
   },
-  resetButtonText: {
+  difficultyButtonText: {
     color: 'white',
-    fontSize: 18,
     fontWeight: '600',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
   },
   soundButton: {
     backgroundColor: '#2196F3',
     padding: 10,
     borderRadius: 8,
-    marginLeft: 10,
   },
   soundButtonDisabled: {
     backgroundColor: '#ccc',
   },
   soundButtonText: {
     fontSize: 20,
+  },
+  scoreBoard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 10,
+  },
+  scoreText: {
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
