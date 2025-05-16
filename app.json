@@ -8,7 +8,6 @@
     "scheme": "TicTacPro",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true
     },
@@ -34,11 +33,11 @@
     "experiments": {
       "typedRoutes": true
     },
+    "owner": "neophile",
     "extra": {
       "eas": {
-        "projectId": "f84e2ac2-250d-46ae-8c56-a5ddcf3a69d6"
+        "projectId": "82bba77c-f8e5-48a6-972c-a59669dde9e0"
       }
-    },
-    "owner": "neophile"
+    }
   }
 }
