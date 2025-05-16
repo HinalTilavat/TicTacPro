@@ -28,6 +28,8 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="newdemo"/>
         <data android:scheme="exp+newdemo"/>
+        <data android:scheme="TicTacPro"/>
+        <data android:scheme="exp+tictacpro"/>
       </intent-filter>
     </activity>
   </application>
