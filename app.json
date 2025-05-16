@@ -33,11 +33,6 @@
     "experiments": {
       "typedRoutes": true
     },
-    "owner": "neophile",
-    "extra": {
-      "eas": {
-        "projectId": "82bba77c-f8e5-48a6-972c-a59669dde9e0"
-      }
-    }
+    "owner": "neophile"
   }
 }
