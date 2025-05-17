@@ -28,11 +28,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "react-native-edge-to-edge"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "owner": "neophile"
+    "owner": "neophile",
+    "extra": {
+      "eas": {
+        "projectId": "a0935e7d-f1f3-4a87-a235-e928c6fb8c2b"
+      }
+    }
   }
 }
